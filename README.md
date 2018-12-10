@@ -1,21 +1,15 @@
-# Sample Plugin [![Build Status](https://travis-ci.org/mattermost/mattermost-plugin-sample.svg?branch=master)](https://travis-ci.org/mattermost/mattermost-plugin-sample)
+# Mattermost Google Calendar plugin
 
-This plugin serves as a starting point for writing a Mattermost plugin. Feel free to base your own plugin off this repository.
+This plugin uses webhooks to post reminders from configured Google Calendar to your Mattermost channel.
 
-## Getting Started
-Shallow clone the repository to a directory matching your plugin name:
-```
-git clone --depth 1 https://github.com/mattermost/mattermost-plugin-sample com.example.my-plugin
-```
+# Development status
 
-Edit `plugin.json` with your `id`, `name`, and `description`:
-```
-{
-    "id": "com.example.my-plugin",
-    "name": "My Plugin",
-    "description": "A plugin to enhance Mattermost."
-}
-```
+Initial stage
+
+# Installation
+
+Go to the GitHub releases tab and download the latest release for your server architecture. You can upload this file in the Mattermost system console to install the plugin.
+
 
 Build your plugin:
 ```
@@ -25,23 +19,5 @@ make
 This will produce a single plugin file (with support for multiple architectures) for upload to your Mattermost server:
 
 ```
-dist/com.example.my-plugin.tar.gz
+dist/my-plugin.tar.gz
 ```
-
-There is a build target to automate deploying and enabling the plugin to your server, but it requires configuration and [http](https://httpie.org/) to be installed:
-```
-export MM_SERVICESETTINGS_SITEURL=http://localhost:8065
-export MM_ADMIN_USERNAME=admin
-export MM_ADMIN_PASSWORD=password
-make deploy
-```
-
-Alternatively, if you are running your `mattermost-server` out of a sibling directory by the same name, use the `deploy` target alone to  unpack the files into the right directory. You will need to restart your server and manually enable your plugin.
-
-In production, deploy and upload your plugin via the [System Console](https://about.mattermost.com/default-plugin-uploads).
-
-## Q&A
-
-### How do I make a server-only or web app-only plugin?
-
-Simply delete the `server` or `webapp` folders and remove the corresponding sections from `plugin.json`. The build scripts will skip the missing portions automatically.

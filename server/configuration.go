@@ -1,30 +1,41 @@
 package main
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/pkg/errors"
 )
 
-// configuration captures the plugin's external configuration as exposed in the Mattermost server
-// configuration, as well as values computed from the configuration. Any public fields will be
-// deserialized from the Mattermost server configuration in OnConfigurationChange.
-//
-// As plugins are inherently concurrent (hooks being called asynchronously), and the plugin
-// configuration can change at any time, access to the configuration must be synchronized. The
-// strategy used in this plugin is to guard a pointer to the configuration, and clone the entire
-// struct whenever it changes. You may replace this with whatever strategy you choose.
-//
-// If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
-// copy appropriate for your types.
+// configuration captures the plugin's external configuration as exposed
+// in Mattermost server configuration.
 type configuration struct {
+	BotUserID                 string
+	Username                  string
+	CalendarOAuthClientID     string
+	CalendarOAuthClientSecret string
+	Secret                    string
 }
 
-// Clone shallow copies the configuration. Your implementation may require a deep copy if
-// your configuration has reference types.
-func (c *configuration) Clone() *configuration {
-	var clone = *c
-	return &clone
+// IsValid validates if all the required fields are set.
+func (c *configuration) IsValid() error {
+	if c.Username == "" {
+		return fmt.Errorf("Need a user to make posts as")
+	}
+
+	if c.CalendarOAuthClientID == "" {
+		return fmt.Errorf("Must have Google Calendar oauth client id")
+	}
+
+	if c.CalendarOAuthClientSecret == "" {
+		return fmt.Errorf("Must have Google Calendar oauth client secret")
+	}
+
+	if c.Secret == "" {
+		return fmt.Errorf("Must have secret key")
+	}
+
+	return nil
 }
 
 // getConfiguration retrieves the active configuration under lock, making it safe to use

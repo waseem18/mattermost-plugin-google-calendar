@@ -59,7 +59,7 @@ endif
 ## Ensures the server dependencies are installed.
 server/.depensure:
 ifneq ($(HAS_SERVER),)
-	cd server && $(DEP) ensure
+	cd server && $(DEP) ensure -v
 	touch $@
 endif
 

@@ -1,7 +1,7 @@
 {
-    "id": "com.mattermost.sample-plugin",
-    "name": "Sample Plugin",
-    "description": "This plugin serves as a starting point for writing a Mattermost plugin.",
+    "id": "google-calendar",
+    "name": "Google Calendar plugin",
+    "description": "This plugin uses webhooks to post reminders from configured Google Calendar.",
     "version": "0.0.1",
     "server": {
         "executables": {
@@ -10,12 +10,34 @@
             "windows-amd64": "server/dist/plugin-windows-amd64.exe"
         }
     },
-    "webapp": {
-        "bundle_path": "webapp/dist/main.js"
-    },
     "settings_schema": {
-        "header": "",
-        "footer": "",
-        "settings": []
+        "header": "To report an issue, make a suggestion or a contribution, or fork your own version of the plugin, [check the repository](https://github.com/waseem18/mattermost-plugin-google-calendar).",
+        "settings": [
+            {
+                "key": "CalendarOAuthClientID",
+                "display_name": "Google Calendar OAuth Client ID",
+                "type": "text",
+                "help_text": "The client ID for the OAuth app registered with Google Cloud."
+            },
+            {
+                "key": "CalendarOAuthClientSecret",
+                "display_name": "Google Calendar OAuth Client Secret",
+                "type": "text",
+                "help_text": "The client secret for the OAuth app registered with Google Cloud."
+            },
+            {
+                "key": "Username",
+                "display_name": "User",
+                "type": "username",
+                "help_text": "Select the username of the user that the plugin will post with. This can be any user, the name and icon will be overridden when posting."
+            },
+            {
+                "key": "Secret",
+                "display_name": "Secret",
+                "type": "generated",
+                "help_text": "This secret is used to authenticate to Mattermost.",
+                "regenerate_help_text": "Regenerates the secret for the webhook URL endpoint. Regenerating the secret invalidates your existing JIRA integrations."
+            }
+        ]
     }
 }
