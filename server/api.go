@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/mattermost/mattermost-server/model"
 	"net/http"
 	"strings"
 
+	"github.com/mattermost/mattermost-server/model"
 	"github.com/mattermost/mattermost-server/plugin"
 	"golang.org/x/oauth2"
 )
