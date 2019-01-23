@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,6 +11,20 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const API_ERROR_ID_NOT_CONNECTED = "not_connected"
+
+type APIErrorResponse struct {
+	ID         string `json:"id"`
+	Message    string `json:"message"`
+	StatusCode int    `json:"status_code"`
+}
+
+func writeAPIError(w http.ResponseWriter, err *APIErrorResponse) {
+	b, _ := json.Marshal(err)
+	w.WriteHeader(err.StatusCode)
+	w.Write(b)
+}
+
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch path := r.URL.Path; path {
@@ -17,6 +32,8 @@ func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Req
 		p.connectUserToGoogleCalendar(w, r)
 	case "/oauth/complete":
 		p.completeGoogleCalendarOauth(w, r)
+	case "/watch":
+		p.watchGoogleCalendar(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -55,18 +72,29 @@ func (p *Plugin) completeGoogleCalendarOauth(w http.ResponseWriter, r *http.Requ
 	googleOauthConfig := p.getOAuthConfig()
 	token, err := googleOauthConfig.Exchange(oauth2.NoContext, code)
 
-	_ = &UserInfo{
-		UserID: userID,
-		Token:  token,
-	}
 	if err != nil {
 		fmt.Printf("oauthConf.Exchange() failed with '%s'\n", err)
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return
 	}
 
+	userInfo := &UserInfo{
+		UserID: userID,
+		Token:  token,
+	}
+
+	p.storeUserInfo(userInfo)
+
+	p.getDirectChannel(userID)
+
+	var calendarInfo CalendarInfo
+
+	p.storeCalendarInfo(userID, &calendarInfo)
+
+	p.subscribeToCalendar(userInfo)
+
 	message := "Welcome to Google Calendar Plugin"
-	p.createBotDMPost(userID, message)
+	p.createBotDMPost(message)
 
 	html := `
 <!DOCTYPE html>
@@ -84,4 +112,10 @@ func (p *Plugin) completeGoogleCalendarOauth(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(html))
+}
+
+func (p *Plugin) watchGoogleCalendar(w http.ResponseWriter, r *http.Request) {
+	userID := r.URL.Query().Get("userID")
+	userInfo, _ := p.getUserInfo(userID)
+	p.fetchEventsFromCalendar(userInfo)
 }
