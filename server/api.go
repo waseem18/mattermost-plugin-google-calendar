@@ -1,8 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"google.golang.org/api/calendar/v3"
 	"net/http"
 	"strings"
 
@@ -11,19 +11,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const API_ERROR_ID_NOT_CONNECTED = "not_connected"
-
-type APIErrorResponse struct {
-	ID         string `json:"id"`
-	Message    string `json:"message"`
-	StatusCode int    `json:"status_code"`
-}
-
-func writeAPIError(w http.ResponseWriter, err *APIErrorResponse) {
-	b, _ := json.Marshal(err)
-	w.WriteHeader(err.StatusCode)
-	w.Write(b)
-}
 
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -83,9 +70,9 @@ func (p *Plugin) completeGoogleCalendarOauth(w http.ResponseWriter, r *http.Requ
 		Token:  token,
 	}
 
-	p.storeUserInfo(userInfo)
+	userInfo.ChannelID, _ = p.getDirectChannel(userInfo)
 
-	p.getDirectChannel(userID)
+	p.storeUserInfo(userInfo)
 
 	var calendarInfo CalendarInfo
 
@@ -93,8 +80,7 @@ func (p *Plugin) completeGoogleCalendarOauth(w http.ResponseWriter, r *http.Requ
 
 	p.subscribeToCalendar(userInfo)
 
-	message := "Welcome to Google Calendar Plugin"
-	p.createBotDMPost(message)
+	p.createBotDMPost(userInfo)
 
 	html := `
 <!DOCTYPE html>
@@ -115,7 +101,19 @@ func (p *Plugin) completeGoogleCalendarOauth(w http.ResponseWriter, r *http.Requ
 }
 
 func (p *Plugin) watchGoogleCalendar(w http.ResponseWriter, r *http.Request) {
+	channelID := r.Header.Get("X-Goog-Channel-ID")
+	resourceID := r.Header.Get("X-Goog-Resource-ID")
+	state := r.Header.Get("X-Goog-Resource-State")
+
 	userID := r.URL.Query().Get("userID")
 	userInfo, _ := p.getUserInfo(userID)
-	p.fetchEventsFromCalendar(userInfo)
+	calendarInfo, _ := p.getCalendarInfo(userID)
+
+	if calendarInfo.CalendarWatchToken == channelID && state == "exists" {
+		p.updateCalendarEvents(userInfo, calendarInfo)
+	} else {
+		calendarService := createCalendarService(userInfo.Token)
+		stopChannel := calendarService.Channels.Stop(&calendar.Channel{Id: channelID, ResourceId: resourceID})
+		stopChannel.Do()
+	}
 }
