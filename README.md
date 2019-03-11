@@ -37,3 +37,9 @@ dist/my-plugin.tar.gz
 11. After creating the Oauth client, copy the Client ID and secret.
 12. Upload the plugin to Mattermost and go to `Google Calendar Plugin settings`. Paste the client id and secret and select a user for the plugin to post event messages with.
 13. Enable the plugin and you should be able to see event reminder notifications.
+
+# TODO
+1. Better error handling
+2. Documentation
+3. Clean code?
+4. Remove completed events from the key value map.
