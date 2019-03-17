@@ -30,13 +30,6 @@
                 "display_name": "User",
                 "type": "username",
                 "help_text": "Select the username of the user that the plugin will post with. This can be any user, the name and icon will be overridden when posting."
-            },
-            {
-                "key": "Secret",
-                "display_name": "Secret",
-                "type": "generated",
-                "help_text": "This secret is used to authenticate to Mattermost.",
-                "regenerate_help_text": "Regenerates the secret for the webhook URL endpoint. Regenerating the secret invalidates your existing JIRA integrations."
             }
         ]
     }
