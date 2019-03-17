@@ -1,8 +1,8 @@
 {
-    "id": "google-calendar",
-    "name": "Google Calendar plugin",
+    "id": "mattermost-google-calendar",
+    "name": "Mattermost Google Calendar plugin",
     "description": "This plugin uses webhooks to post reminders from configured Google Calendar.",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "server": {
         "executables": {
             "linux-amd64": "server/dist/plugin-linux-amd64",
