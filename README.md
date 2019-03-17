@@ -10,18 +10,16 @@ Initial stage
 
 Go to the GitHub releases tab and download the latest release for your server architecture. You can upload this file in the Mattermost system console to install the plugin.
 
+We would need Google Oauth credentials before we can use the plugin. Below is the procedure on how to signup for Google Oauth credentials, 
 
-Build your plugin:
-```
-make
-```
-
-This will produce a single plugin file (with support for multiple architectures) for upload to your Mattermost server:
-
-```
-dist/my-plugin.tar.gz
-```
-
+1. Go to [Google Cloud Dashboard](https://console.cloud.google.com/home/dashboard) and create a new project.
+2. After creating a project click on `Go to APIs overview` card from the dashboard which will take you to the API dashboard.
+3. Select `Credentials` from the left menu 
+4. Now click on `Create Credentials` dropdown and select `Oauth client ID` option.
+5. While creating the Oauth credentials, enter the values of `Authorized Javascript Origins` as `<Mattermost server URL>` and the value of `Authorised redirect URIs` as `<Mattermost server URL>/plugins/google-calendar/oauth/complete`.
+6. After creating the Oauth client, copy the Client ID and secret.
+7. Upload the plugin to Mattermost and go to `Google Calendar Plugin settings`. Paste the client id and secret and select a user for the plugin to post event messages with.
+8. Enable the plugin and you should be able to see event reminder notifications.
 # Local setup
 
 1. Clone the repo and make sure `mattermost server` is up and running.
