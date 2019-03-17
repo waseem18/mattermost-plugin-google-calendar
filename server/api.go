@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"strings"
 
+	"context"
+	"github.com/mattermost/mattermost-server/mlog"
 	"github.com/mattermost/mattermost-server/model"
 	"github.com/mattermost/mattermost-server/plugin"
 	"golang.org/x/oauth2"
 )
-
 
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -39,7 +40,7 @@ func (p *Plugin) connectUserToGoogleCalendar(w http.ResponseWriter, r *http.Requ
 
 	googleOauthConfig := p.getOAuthConfig()
 
-	url := googleOauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	url := googleOauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
@@ -57,10 +58,15 @@ func (p *Plugin) completeGoogleCalendarOauth(w http.ResponseWriter, r *http.Requ
 
 	code := r.FormValue("code")
 	googleOauthConfig := p.getOAuthConfig()
-	token, err := googleOauthConfig.Exchange(oauth2.NoContext, code)
+	token, err := googleOauthConfig.Exchange(context.TODO(), code)
+
+	if !token.Valid() {
+		fmt.Fprintln(w, "Retreived invalid token")
+		return
+	}
 
 	if err != nil {
-		fmt.Printf("oauthConf.Exchange() failed with '%s'\n", err)
+		mlog.Error("oauthConf.Exchange() failed with" + err.Error())
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return
 	}
@@ -110,9 +116,9 @@ func (p *Plugin) watchGoogleCalendar(w http.ResponseWriter, r *http.Request) {
 	calendarInfo, _ := p.getCalendarInfo(userID)
 
 	if calendarInfo.CalendarWatchToken == channelID && state == "exists" {
-		p.updateCalendarEvents(userInfo, calendarInfo)
+		_ = p.updateCalendarEvents(userInfo, calendarInfo)
 	} else {
-		calendarService := createCalendarService(userInfo.Token)
+		calendarService, _ := p.createCalendarService(userInfo)
 		stopChannel := calendarService.Channels.Stop(&calendar.Channel{Id: channelID, ResourceId: resourceID})
 		stopChannel.Do()
 	}

@@ -20,12 +20,12 @@ import (
 )
 
 const (
-	userTokenKey            = "_usertoken"
-	calendarTokenKey        = "_calendartoken"
-	CalendarIconURL         = "plugins/google-calendar/Google_Calendar_Logo.png"
-	BotUsername             = "Calendar Plugin"
-	postPretext             = "Event starting in 10 min"
-	welcomeMessage          = "Welcome to Google Calendar Plugin"
+	userTokenKey     = "_usertoken"
+	calendarTokenKey = "_calendartoken"
+	CalendarIconURL  = "plugins/google-calendar/Google_Calendar_Logo.png"
+	BotUsername      = "Calendar Plugin"
+	postPretext      = "Event starting in 10 min"
+	welcomeMessage   = "Welcome to Google Calendar Plugin"
 )
 
 type Plugin struct {
@@ -137,7 +137,7 @@ func (p *Plugin) createBotDMPost(userInfo *UserInfo) *model.AppError {
 	}
 
 	if _, err := p.API.CreatePost(post); err != nil {
-		mlog.Error(err.Error())
+		mlog.Error("Error while creating bot welcome post" + err.Error())
 		return err
 	}
 
@@ -154,9 +154,14 @@ func (p *Plugin) getDirectChannel(userInfo *UserInfo) (string, error) {
 	return channel.Id, nil
 }
 
-func (p *Plugin) createAPostForEvent(userID string, e EventInfo) {
+func (p *Plugin) createAPostForEvent(userID string, e EventInfo) error {
 	event := generateSlackAttachment(e)
-	userInfo, _ := p.getUserInfo(userID)
+	userInfo, err := p.getUserInfo(userID)
+
+	if err != nil {
+		mlog.Error("Error fetching user details" + err.Error())
+		return err
+	}
 
 	p.API.CreatePost(&model.Post{
 		ChannelId: userInfo.ChannelID,
@@ -168,17 +173,34 @@ func (p *Plugin) createAPostForEvent(userID string, e EventInfo) {
 			"attachments":   []*model.SlackAttachment{event},
 		},
 	})
+	return nil
 }
 
 // createCalendarService initialises and returns a Google Calendar service
-func createCalendarService(token *oauth2.Token) *calendar.Service {
-	client := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(token))
+func (p *Plugin) createCalendarService(u *UserInfo) (*calendar.Service, error) {
+	googleOauthConfig := p.getOAuthConfig()
+	tokenSource := googleOauthConfig.TokenSource(context.TODO(), u.Token)
+	newToken, err := tokenSource.Token()
+	if err != nil {
+		mlog.Error("Error fetching token from token source" + err.Error())
+		return nil, err
+	}
+
+	if newToken.AccessToken != u.Token.AccessToken {
+		u.Token = newToken
+		err := p.storeUserInfo(u)
+		if err != nil {
+			mlog.Error("Error storing the new access token " + err.Error())
+			return nil, err
+		}
+	}
+
+	client := oauth2.NewClient(context.TODO(), tokenSource)
 	calendarService, err := calendar.New(client)
 	if err != nil {
-		mlog.Error(err.Error())
-		return nil
+		return nil, err
 	}
-	return calendarService
+	return calendarService, nil
 }
 
 func (p *Plugin) subscribeToCalendar(u *UserInfo) {
@@ -195,54 +217,73 @@ func (p *Plugin) subscribeToCalendar(u *UserInfo) {
 	cron.Start()
 }
 
-func (p *Plugin) setupCalendarWatchService(u *UserInfo) {
-	c, _ := p.getCalendarInfo(u.UserID)
-	calendarService := createCalendarService(u.Token)
+func (p *Plugin) setupCalendarWatchService(u *UserInfo) error {
+	calendarInfo, calendarInfoErr := p.getCalendarInfo(u.UserID)
+	if calendarInfoErr != nil {
+		return calendarInfoErr
+	}
+
+	calendarService, calendarServiceErr := p.createCalendarService(u)
+	if calendarServiceErr != nil {
+		return calendarServiceErr
+	}
 
 	config := p.API.GetConfig()
 
-	var id = uuid.New().String()
+	uuid := uuid.New().String()
 
 	eventsWatchCall := calendarService.Events.Watch("primary", &calendar.Channel{
 		Address: fmt.Sprintf("%s/plugins/google-calendar/watch?userID=%s", *config.ServiceSettings.SiteURL, u.UserID),
-		Id:      id,
+		Id:      uuid,
 		Type:    "web_hook",
 	})
 
-	ch, err := eventsWatchCall.Do()
+	channel, err := eventsWatchCall.Do()
 	if err != nil {
-		mlog.Error(err.Error())
+		return err
 	}
 
-	c.CalendarWatchToken = id
-	c.CalendarWatchExpiry = ch.Expiration
-	p.storeCalendarInfo(u.UserID, c)
+	calendarInfo.CalendarWatchToken = uuid
+	calendarInfo.CalendarWatchExpiry = channel.Expiration
+	p.storeCalendarInfo(u.UserID, calendarInfo)
+
+	return nil
 }
 
-func (p *Plugin) setupWatchRenewal(userID string) {
-	calendarInfo, _ := p.getCalendarInfo(userID)
-	userInfo, _ := p.getUserInfo(userID)
+func (p *Plugin) setupWatchRenewal(userID string) error {
+	calendarInfo, calendarInfoErr := p.getCalendarInfo(userID)
+	if calendarInfoErr != nil {
+		return calendarInfoErr
+	}
+
+	userInfo, userInfoErr := p.getUserInfo(userID)
+	if userInfoErr != nil {
+		return userInfoErr
+	}
+
 	diff := calendarInfo.CalendarWatchExpiry - (time.Now().UnixNano()/int64(time.Millisecond) + 60000)
 	if diff <= 60000 {
 		time.AfterFunc(time.Millisecond*time.Duration(diff), func() {
 			p.setupCalendarWatchService(userInfo)
 		})
 	}
+	return nil
 }
 
-func (p *Plugin) checkIfTheEventAlreadyExists(id, userID string) bool {
+// checkIfTheEventAlreadyExists checks if event with given eventID already exists
+func (p *Plugin) checkIfTheEventAlreadyExists(eventID, userID string) bool {
 	calendarInfo, _ := p.getCalendarInfo(userID)
 	for _, event := range calendarInfo.Events {
-		if event.Id == id {
+		if event.Id == eventID {
 			return true
 		}
 	}
 	return false
 }
 
-func (p *Plugin) fetchEventsFromCalendar(u *UserInfo) *calendar.Events{
-	calendarService := createCalendarService(u.Token)
-	
+func (p *Plugin) fetchEventsFromCalendar(u *UserInfo) (*calendar.Events, error) {
+	calendarService, _ := p.createCalendarService(u)
+
 	var calendarInfo *CalendarInfo
 	var calendarEvents *calendar.Events
 	var err error
@@ -258,19 +299,28 @@ func (p *Plugin) fetchEventsFromCalendar(u *UserInfo) *calendar.Events{
 	}
 
 	if err != nil {
-		mlog.Error(err.Error())
+		return nil, err
 	}
 
-	return calendarEvents
+	return calendarEvents, nil
 }
 
-func (p *Plugin) processEventsFromCalendar(u *UserInfo) {
+func (p *Plugin) processEventsFromCalendar(u *UserInfo) error {
 	var calendarInfo *CalendarInfo
-	if info, _ := p.getCalendarInfo(u.UserID); info != nil {
+	info, err := p.getCalendarInfo(u.UserID)
+
+	if info != nil {
 		calendarInfo = info
 	}
-	
-	calendarEvents := p.fetchEventsFromCalendar(u)
+
+	if err != nil {
+		return err
+	}
+
+	calendarEvents, err := p.fetchEventsFromCalendar(u)
+	if err != nil {
+		return err
+	}
 
 	if len(calendarEvents.Items) > 0 {
 		for _, event := range calendarEvents.Items {
@@ -286,14 +336,18 @@ func (p *Plugin) processEventsFromCalendar(u *UserInfo) {
 		calendarInfo.LastEventUpdate = time.Now().Format(time.RFC3339)
 		p.storeCalendarInfo(u.UserID, calendarInfo)
 	}
+	return nil
 }
 
-func (p *Plugin) updateCalendarEvents(u *UserInfo, calendarInfo *CalendarInfo) {
-	calendarEvents := p.fetchEventsFromCalendar(u)
+func (p *Plugin) updateCalendarEvents(u *UserInfo, calendarInfo *CalendarInfo) error {
+	calendarEvents, err := p.fetchEventsFromCalendar(u)
+	if err != nil {
+		return err
+	}
 
 	for _, event := range calendarEvents.Items {
 		if event.Status == "cancelled" {
-			calendarInfo = p.removeAnEvent(u.UserID, event)
+			calendarInfo, _ = p.removeAnEvent(u.UserID, event)
 		} else if p.checkIfTheEventAlreadyExists(event.Id, u.UserID) == true {
 			e := EventInfo{
 				Id:        event.Id,
@@ -303,8 +357,7 @@ func (p *Plugin) updateCalendarEvents(u *UserInfo, calendarInfo *CalendarInfo) {
 				Summary:   event.Summary,
 				Status:    event.Status,
 			}
-
-			calendarInfo = p.updateEvent(event.Id, u.UserID, e)
+			calendarInfo, _ = p.updateEvent(event.Id, u.UserID, e)
 		} else {
 			calendarInfo.Events = append(calendarInfo.Events, EventInfo{
 				Id:        event.Id,
@@ -318,22 +371,24 @@ func (p *Plugin) updateCalendarEvents(u *UserInfo, calendarInfo *CalendarInfo) {
 		calendarInfo.LastEventUpdate = time.Now().Format(time.RFC3339)
 		p.storeCalendarInfo(u.UserID, calendarInfo)
 	}
+	return nil
 }
 
 // checkEvents checks if there is any event 10 min after the current time.
 // If there is an event, if triggers a post for it.
-func (p *Plugin) checkEvents(userID string) {
-	c, err := p.getCalendarInfo(userID)
+func (p *Plugin) checkEvents(userID string) error {
+	calendarInfo, err := p.getCalendarInfo(userID)
 	if err != nil {
-		mlog.Error(err.Error())
+		return err
 	}
-	for _, e := range c.Events {
+	for _, e := range calendarInfo.Events {
 		afterTenMinutes := time.Now().Add(time.Minute * 10).Format("3:04PM")
 		if afterTenMinutes == e.StartTime {
-			p.createAPostForEvent(userID, e)
+			_ = p.createAPostForEvent(userID, e)
 		}
 	}
 	p.setupWatchRenewal(userID)
+	return nil
 }
 
 func (p *Plugin) storeUserInfo(userInfo *UserInfo) error {
@@ -386,18 +441,11 @@ func (p *Plugin) getCalendarInfo(userID string) (*CalendarInfo, error) {
 	return &calendarInfo, nil
 }
 
-func (p *Plugin) getEvent(eventID, userID string) (*EventInfo, error) {
-	calendarInfo, _ := p.getCalendarInfo(userID)
-	for _, event := range calendarInfo.Events {
-		if event.Id == eventID {
-			return &event, nil
-		}
+func (p *Plugin) updateEvent(eventID, userID string, updatedEvent EventInfo) (*CalendarInfo, error) {
+	calendarInfo, err := p.getCalendarInfo(userID)
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.New("User with userID" + userID + " has no event with eventID" + eventID)
-}
-
-func (p *Plugin) updateEvent(eventID, userID string, updatedEvent EventInfo) *CalendarInfo {
-	calendarInfo, _ := p.getCalendarInfo(userID)
 	for index := range calendarInfo.Events {
 		event := &calendarInfo.Events[index]
 		if event.Id == eventID {
@@ -410,16 +458,19 @@ func (p *Plugin) updateEvent(eventID, userID string, updatedEvent EventInfo) *Ca
 			break
 		}
 	}
-	return calendarInfo
+	return calendarInfo, nil
 }
 
-func (p *Plugin) removeAnEvent(userID string, e *calendar.Event) *CalendarInfo {
-	calendarInfo, _ := p.getCalendarInfo(userID)
+func (p *Plugin) removeAnEvent(userID string, e *calendar.Event) (*CalendarInfo, error) {
+	calendarInfo, err := p.getCalendarInfo(userID)
+	if err != nil {
+		return nil, errors.New("Failed to get calendar information")
+	}
 	for index, event := range calendarInfo.Events {
 		if event.Id == e.Id {
 			calendarInfo.Events = append(calendarInfo.Events[:index], calendarInfo.Events[index+1:]...)
 			break
 		}
 	}
-	return calendarInfo
+	return calendarInfo, nil
 }
