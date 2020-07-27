@@ -3,8 +3,9 @@
 This plugin uses webhooks to post reminders from configured Google Calendar to your Mattermost channel.
 
 # Development status
+***Discontinued***
 
-Initial stage
+Working Google Calendar plugin can be found at - https://github.com/mattermost/mattermost-plugin-google-calendar/tree/v0.2.0
 
 # Installation
 
